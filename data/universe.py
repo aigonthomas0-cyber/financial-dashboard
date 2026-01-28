@@ -1,0 +1,7 @@
+UNIVERSE_150 = [
+    "AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","BRK-B","JPM","V",
+    "SPY","QQQ","DIA","IWM",
+    "BTC-USD","ETH-USD"
+]
+
+DEFAULT_BENCHMARK = "^GSPC"

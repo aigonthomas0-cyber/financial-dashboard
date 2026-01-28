@@ -1,38 +1,73 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import plotly.express as px
 
-st.title("🔎 Fiche Actif")
+from data.universe import UNIVERSE_150
+from data.providers import get_history
+from data.indicators import (
+    returns, cagr, volatility, max_drawdown,
+    sharpe_ratio, summary
+)
 
-ticker = st.text_input("Ticker (ex: AAPL, MSFT, SPY, BTC-USD)", "AAPL").strip()
+st.set_page_config(page_title="Fiche Actif", layout="wide")
 
-period = st.selectbox("Période", ["1mo", "3mo", "6mo", "1y", "2y", "5y"], index=3)
+st.title("📄 Fiche Actif")
+st.caption("Analyse détaillée d’un actif financier")
 
-@st.cache_data(ttl=300)
-def load_prices(ticker: str, period: str):
-    df = yf.download(ticker, period=period, interval="1d", progress=False)
-    if df is None or df.empty:
-        return pd.DataFrame()
-    df = df.reset_index()
-    df.columns = [c.lower() for c in df.columns]
-    return df
+# Sélection actif
+ticker = st.selectbox(
+    "Choisissez un actif",
+    sorted(UNIVERSE_150),
+    index=0
+)
 
-df = load_prices(ticker, period)
+period = st.radio(
+    "Période",
+    ["6mo", "1y", "2y", "5y"],
+    horizontal=True,
+    index=1
+)
+
+# Récupération données
+df = get_history(ticker, period=period)
 
 if df.empty:
-    st.error("Aucune donnée trouvée pour ce ticker. Essaie un autre (ex: SPY, MSFT, BTC-USD).")
+    st.warning("Données indisponibles pour cet actif.")
     st.stop()
 
-last = float(df["close"].iloc[-1])
-first = float(df["close"].iloc[0])
-perf = (last / first - 1) * 100
+close = df["close"].dropna()
 
-c1, c2 = st.columns(2)
-c1.metric("Dernier cours", f"{last:,.2f}")
-c2.metric("Performance période", f"{perf:,.2f}%")
+# Graphique prix
+fig_price = px.line(
+    df,
+    x=df.index,
+    y="close",
+    title=f"{ticker} — Évolution du prix"
+)
+st.plotly_chart(fig_price, use_container_width=True)
 
-fig = px.line(df, x="date", y="close", title=f"Cours — {ticker}")
-st.plotly_chart(fig, use_container_width=True)
+# KPIs
+stats = summary(close)
 
-st.dataframe(df.tail(20), use_container_width=True)
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("Performance totale", f"{stats['Perf totale']*100:.2f}%")
+k2.metric("CAGR", f"{stats['CAGR']*100:.2f}%")
+k3.metric("Volatilité", f"{stats['Vol annualisée']*100:.2f}%")
+k4.metric("Max drawdown", f"{stats['Max drawdown']*100:.2f}%")
+
+# Rendements
+ret = returns(close)
+
+fig_ret = px.histogram(
+    ret.dropna(),
+    nbins=50,
+    title="Distribution des rendements"
+)
+st.plotly_chart(fig_ret, use_container_width=True)
+
+# Tableau indicateurs
+with st.expander("📊 Indicateurs détaillés"):
+    st.dataframe(
+        pd.DataFrame(stats, index=["Valeur"]).T,
+        use_container_width=True
+    )
